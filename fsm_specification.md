@@ -27,7 +27,7 @@ stateDiagram-v2
     WAITING_FOR_PLAYERS --> GAME_START: 2 clients connected
     WAITING_FOR_PLAYERS --> CLEANUP: Waiting player disconnects
 
-    GAME_START --> PLAYER_TURN: Initialize board and assign roles
+    GAME_START --> PLAYER_TURN: Initialize board, Player 1 = X and Player 2 = O
 
     PLAYER_TURN --> EVALUATE_MOVE: Active player sends MOVE
     PLAYER_TURN --> PLAYER_TURN: Out-of-turn or malformed MOVE / send ERROR
