@@ -9,7 +9,7 @@ If I use AI to help write code, it must follow `protocol_blueprint.md` and `fsm_
 > Help me implement the networking code for my Tic-Tac-Toe project.
 >
 > Follow `protocol_blueprint.md` exactly.
->
+> Use the exact fields and data types for every message defined in `protocol_blueprint.md`.
 > Use TCP, UTF-8 JSON, and newline-delimited messages.
 > Do not rename fields or create new message types.
 > Handle partial messages and multiple messages arriving in one `recv()` call.
