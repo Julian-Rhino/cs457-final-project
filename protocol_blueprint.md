@@ -12,7 +12,7 @@ This is important because TCP works as a continuous stream of bytes. One call to
 
 ## 2. TCP Framing Rule
 
-Every JSON message will be encoded using UTF-8 and followed by one newline character (\n).
+Every JSON message will use UTF-8 and end with one newline character (`\n`). Each message will stay on one line, and the newline tells the program where that message ends.
 
 For example:
 
@@ -22,7 +22,7 @@ For example:
 
 ## 3. Message Format
 
-Messages use JSON objects. Depending on the message type, the message can contain these fields:
+Every message contains `msg_type`, `player_id`, and `timestamp`. Messages that need additional information also contain a `payload` object.
 
 - `msg_type` - string that tells what kind of message it is
 - `player_id` - string identifying the player or server
@@ -76,6 +76,8 @@ Example:
   "timestamp": 1727000001
 }
 ```
+
+
 ### GAME_START
 
 **Direction:** Server -> Clients
@@ -135,6 +137,8 @@ Example:
   "timestamp": 1727000005
 }
 ```
+
+
 ### STATE_UPDATE
 
 **Direction:** Server -> Clients
@@ -144,8 +148,9 @@ Example:
 **Fields:**
 - `msg_type` - string
 - `player_id` - string
-- `payload.board` - array of 9 strings
+- `payload.board` - array of 9 strings; each string is `"X"`, `"O"`, or `""` for an empty square
 - `payload.active_player` - string
+- `payload.scores` - object mapping each player name to an integer score
 - `timestamp` - integer
 
 Example:
@@ -156,7 +161,11 @@ Example:
   "player_id": "SERVER",
   "payload": {
     "board": ["X", "", "", "", "O", "", "", "", ""],
-    "active_player": "Bob"
+    "active_player": "Bob",
+    "scores": {
+      "Alice": 0,
+      "Bob": 0
+    }
   },
   "timestamp": 1727000006
 }
@@ -213,6 +222,8 @@ Example:
   "timestamp": 1727000010
 }
 ```
+
+
 ### GAME_OVER
 
 **Direction:** Server -> Clients
@@ -224,8 +235,10 @@ Example:
 - `player_id` - string
 - `payload.result` - string such as `WIN`, `DRAW`, or `FORFEIT`
 - `payload.winner` - string or null
-- `payload.board` - array of 9 strings
+- `payload.board` - array of 9 strings; each string is `"X"`, `"O"`, or `""` for an empty square
+- `payload.scores` - object mapping each player name to their final integer score
 - `timestamp` - integer
+
 
 Example:
 
@@ -236,11 +249,17 @@ Example:
   "payload": {
     "result": "WIN",
     "winner": "Alice",
-    "board": ["X", "O", "", "X", "O", "", "X", "", ""]
+    "board": ["X", "O", "", "X", "O", "", "X", "", ""],
+    "scores": {
+      "Alice": 1,
+      "Bob": 0
+    }
   },
   "timestamp": 1727000020
 }
 ```
+
+
 ## 5. Raw TCP Stream Example
 
 TCP does not keep message boundaries, so multiple messages can arrive together or one message can arrive in pieces.
@@ -271,7 +290,7 @@ If the game is active, the other player wins by forfeit.
 
 A normal TCP connection can also close using TCP FIN.
 
-If `recv()` returns `b""`, it means the other side closed the connection. The server should stop reading from that socket and treat the player as disconnected.
+If `recv()` returns `b""`, it means the other side closed the connection. The server should stop the receive loop, close the socket, and treat the player as disconnected.
 
 ### Unexpected Disconnect
 
