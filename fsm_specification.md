@@ -28,6 +28,7 @@ stateDiagram-v2
     WAITING_FOR_PLAYERS --> CLEANUP: Waiting player disconnects
 
     GAME_START --> PLAYER_TURN: Initialize board, Player 1 = X and Player 2 = O
+    GAME_START --> GAME_OVER: Player disconnects / opponent wins by forfeit
 
     PLAYER_TURN --> EVALUATE_MOVE: Active player sends MOVE
     PLAYER_TURN --> PLAYER_TURN: Out-of-turn or malformed MOVE / send ERROR
@@ -36,7 +37,10 @@ stateDiagram-v2
     EVALUATE_MOVE --> PLAYER_TURN: Valid move / next player's turn
     EVALUATE_MOVE --> PLAYER_TURN: Invalid move / send ERROR
     EVALUATE_MOVE --> GAME_OVER: Victory or draw detected
-    EVALUATE_MOVE --> GAME_OVER: Player disconnects
+    EVALUATE_MOVE --> GAME_OVER: Player disconnects / opponent wins by forfeit
 
     GAME_OVER --> CLEANUP: Broadcast final results
     CLEANUP --> WAITING_FOR_PLAYERS: Reset state
+```
+
+A player disconnect can happen normally through a `DISCONNECT` message or unexpectedly through TCP EOF or a connection error. If this happens during an active game, the other player wins by forfeit.
