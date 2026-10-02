@@ -1,6 +1,6 @@
 # CS 457 Project Statement of Work (SOW) & Protocol Specification Template
 
-**Student Name:** Julian Walters 
+**Student Name:** Julian Walters
 **Date:** 2026-09-18 
 **Course:** CS 457 - Computer Networks  
 **Target Server Domain:** `server.Walters.edu`  
@@ -32,19 +32,20 @@
 
 ### 2.1 Message Transport & Serialization Format
 - **Transport Protocol:** TCP
-- **Serialization Format:** [JSON / Fixed-Header Binary / Delimited Text]
-- **Framing Mechanism:** [e.g., Newline-delimited (`\n`) JSON payloads OR 4-byte big-endian length prefix]
+- **Serialization Format:** JSON encoded using UTF-8
+- **Framing Mechanism:** Newline-delimited JSON. Each complete JSON message ends with `\n`. The receiver keeps incoming data in a buffer until a newline is found.
 
 ### 2.2 Message Schema Definitions
 
 #### Message Types:
-1. `CONNECT` (Client -> Server): Request to join the game room.
-2. `LOBBY_WAIT` (Server -> Client): Notification that server is waiting for Player 2.
-3. `GAME_START` (Server -> Clients): Game initiated, assigns roles (e.g. Player X vs Player O).
-4. `MOVE` (Client -> Server): Player action (e.g., cell coordinates or answer choice).
-5. `STATE_UPDATE` (Server -> Clients): Broadcast current game board / state and active player turn.
-6. `GAME_OVER` (Server -> Clients): Victory / Draw notification with final scores.
-7. `ERROR` (Server -> Client): Invalid move or malformed packet error.
+1. `CONNECT` (Client -> Server): Player requests to join the game.
+2. `LOBBY_WAIT` (Server -> Client): Server tells the first player that it is waiting for Player 2.
+3. `GAME_START` (Server -> Clients): Server starts the game and assigns Player 1 = X and Player 2 = O.
+4. `MOVE` (Client -> Server): Active player sends a row and column for their move.
+5. `STATE_UPDATE` (Server -> Clients): Server sends the updated board, scores, and active player.
+6. `ERROR` (Server -> Client): Server reports an invalid move, out-of-turn move, or malformed message.
+7. `DISCONNECT` (Client -> Server): Client tells the server that the player is intentionally leaving.
+8. `GAME_OVER` (Server -> Clients): Server sends the final result, winner, board, and scores.
 
 #### Example JSON Protocol Schema:
 ```json
@@ -62,7 +63,12 @@
 ---
 
 ### 2.3 Game State Machine (FSM) Design (Sprint 1 Deliverable)
-- **State Transitions:** Detail state flow: `INIT` -> `WAITING_FOR_PLAYERS` -> `PLAYER_TURN` -> `EVALUATE_MOVE` -> `CHECK_WIN_DRAW` -> `GAME_OVER` -> `CLEANUP`.
+
+- **State Transitions:** `INIT` -> `WAITING_FOR_PLAYERS` -> `GAME_START` -> `PLAYER_TURN` -> `EVALUATE_MOVE` -> `GAME_OVER` -> `CLEANUP`.
+- Invalid moves and out-of-turn moves send an `ERROR` and return to `PLAYER_TURN`.
+- If a player disconnects during an active game, the other player wins by forfeit.
+- After `CLEANUP`, the server returns to `WAITING_FOR_PLAYERS`.
+- The full Mermaid state diagram is documented in `fsm_specification.md`.
 
 ---
 
