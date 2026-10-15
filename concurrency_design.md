@@ -67,7 +67,9 @@ If the move is invalid or a player tries to move out of turn, the server does no
 
 ## 5. State Broadcast Design
 
-After every valid move, the server creates a `STATE_UPDATE` message.
+After every valid move that does not end the round, the server creates a `STATE_UPDATE` message.
+
+If the move ends the round, the server sends a `GAME_OVER` message to both clients instead.
 
 The update contains the current board and the active player's turn.
 
