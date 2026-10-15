@@ -112,15 +112,18 @@ sequenceDiagram
     Note over Server: Validate turn and check cell
 
     alt Valid Move
-        Note over Server: Update board and switch turn
-        Server-->>Client1: STATE_UPDATE
-        Server-->>Client2: STATE_UPDATE
+        Note over Server: Update board
 
-        opt Round Over
-            Note over Server: Update scores
-            Server-->>Client1: SCORE_UPDATE
-            Server-->>Client2: SCORE_UPDATE
+        alt Round Over
+            Note over Server: Determine winner and update scores
+            Server-->>Client1: GAME_OVER
+            Server-->>Client2: GAME_OVER
+        else Game Continues
+            Note over Server: Switch turn
+            Server-->>Client1: STATE_UPDATE
+            Server-->>Client2: STATE_UPDATE
         end
+
     else Invalid Move
         Server-->>Client1: ERROR
     end
