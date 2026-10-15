@@ -75,12 +75,15 @@
 ## 3. Game Behavior & Server Concurrency Architecture (Sprint 2 Deliverable)
 
 ### 3.1 Server Concurrency Strategy
-- **Architecture Choice:** [Multi-Threading (`threading.Thread`) OR Non-blocking I/O multiplexing (`select.select` / `selectors`)]
-- **Synchronization Logic:** Explain how shared game state and client list are thread-safe (e.g. `threading.Lock`) to prevent race conditions during turn processing.
+
+- **Architecture Choice:** Non-blocking I/O multiplexing using Python's `selectors` module.
+- **Synchronization Logic:** The server will use one main event loop to manage the listening socket and both client connections. Each socket will be placed into non-blocking mode and registered with the selector. Because the server processes state-changing events one at a time in a single thread, multiple threads will not modify the board, turn, or scores at the same time. Therefore, `threading.Lock` is not required for this design.
 
 ### 3.2 State & Score Synchronization Across Clients
-- **Turn Enforcement:** Detail how the server validates active player ID before processing moves and broadcasts updated turn notifications to all clients.
-- **Score & Board Synchronization:** Describe how state broadcasts keep client screens synchronized in real time.
+
+- **Turn Enforcement:** The server keeps track of the active player and validates the player's identity, requested board position, and selected cell before accepting a move. If a player sends a move out of turn or selects an invalid position, the server sends an `ERROR` message and does not change the game state.
+
+- **Score & Board Synchronization:** After a valid move, the server updates the authoritative board and active player and sends a `STATE_UPDATE` message to both clients. The message contains the current board, active player, and scores so both clients remain synchronized. When the game ends, the server sends a `GAME_OVER` message containing the final board, result, winner, and scores. Clients cannot directly modify the server's game state or scores.
 
 ---
 
