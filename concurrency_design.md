@@ -59,9 +59,9 @@ The server will check:
 4. Whether the selected cell is empty.
 5. Whether the round has already ended.
 
-If the move is valid, the server updates the board and switches the active turn to the other player.
+If the move is valid, the server updates the board and checks whether the move caused a win or draw.
 
-The updated state is then sent to both clients so that both players have the same copy of the board and know whose turn is next.
+If the round continues, the server switches the active turn to the other player and sends the updated state to both clients. If the round is over, the server updates the scores and sends the final game state to both clients.
 
 If the move is invalid or a player tries to move out of turn, the server does not change the game state. Instead, it sends an error message back to the client that made the invalid request.
 
@@ -71,7 +71,7 @@ After every valid move that does not end the round, the server creates a `STATE_
 
 If the move ends the round, the server sends a `GAME_OVER` message to both clients instead.
 
-The update contains the current board and the active player's turn.
+The update contains the current board, the active player's turn, and the current scores.
 
 The server sends the same state update to both connected clients. This keeps Player X and Player O synchronized with the server.
 
@@ -96,7 +96,7 @@ If Player O wins, Player O's score is increased.
 
 If the round is a draw, neither player's win score is increased.
 
-After the score is updated, the server sends the updated score information to both clients.
+After the score is updated, the server sends a `GAME_OVER` message containing the final scores to both clients.
 
 This makes sure both clients display the same scores and leaderboard information.
 
