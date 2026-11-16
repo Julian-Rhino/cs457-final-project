@@ -2,6 +2,7 @@ import argparse
 import json
 import selectors
 import socket
+import time
 
 
 HOST = "0.0.0.0"
@@ -28,6 +29,29 @@ def decode_messages(buffer, data):
             print("Received invalid JSON message")
 
     return messages, buffer
+
+
+def make_server_message(msg_type, payload=None):
+    message = {
+        "msg_type": msg_type,
+        "player_id": "SERVER",
+        "timestamp": int(time.time()),
+    }
+
+    if payload is not None:
+        message["payload"] = payload
+
+    return message
+
+
+def queue_message(selector, client_socket, outgoing_buffers, message):
+    outgoing_buffers[client_socket] += encode_message(message)
+
+    selector.modify(
+        client_socket,
+        selectors.EVENT_READ | selectors.EVENT_WRITE,
+        data="client",
+    )
 
 
 def valid_port(value):
@@ -64,8 +88,12 @@ def main():
     args = parse_arguments()
 
     selector = selectors.DefaultSelector()
+
     clients = set()
-    buffers = {}
+    receive_buffers = {}
+    outgoing_buffers = {}
+    player_names = {}
+    players = []
 
     server_socket = socket.socket(
         socket.AF_INET,
@@ -94,7 +122,7 @@ def main():
         while True:
             events = selector.select()
 
-            for key, _ in events:
+            for key, mask in events:
                 if key.data == "server":
                     client_socket, address = server_socket.accept()
 
@@ -106,7 +134,8 @@ def main():
                     client_socket.setblocking(False)
 
                     clients.add(client_socket)
-                    buffers[client_socket] = ""
+                    receive_buffers[client_socket] = ""
+                    outgoing_buffers[client_socket] = b""
 
                     selector.register(
                         client_socket,
@@ -119,28 +148,120 @@ def main():
                 else:
                     client_socket = key.fileobj
 
-                    try:
-                        data = client_socket.recv(1024)
-                    except ConnectionResetError:
-                        data = b""
+                    if mask & selectors.EVENT_READ:
+                        try:
+                            data = client_socket.recv(1024)
+                        except ConnectionResetError:
+                            data = b""
 
-                    if not data:
-                        print("Client disconnected")
+                        if not data:
+                            print("Client disconnected")
 
-                        selector.unregister(client_socket)
-                        clients.remove(client_socket)
-                        buffers.pop(client_socket, None)
-                        client_socket.close()
+                            selector.unregister(client_socket)
+                            clients.remove(client_socket)
+                            receive_buffers.pop(client_socket, None)
+                            outgoing_buffers.pop(client_socket, None)
+                            player_names.pop(client_socket, None)
 
-                        continue
+                            if client_socket in players:
+                                players.remove(client_socket)
 
-                    messages, buffers[client_socket] = decode_messages(
-                        buffers[client_socket],
-                        data,
-                    )
+                            client_socket.close()
+                            continue
 
-                    for message in messages:
-                        print(f"Received: {message}")
+                        messages, receive_buffers[client_socket] = (
+                            decode_messages(
+                                receive_buffers[client_socket],
+                                data,
+                            )
+                        )
+
+                        for message in messages:
+                            print(f"Received: {message}")
+
+                            if message.get("msg_type") == "CONNECT":
+                                player_name = message.get("player_id")
+
+                                if not player_name:
+                                    error_message = make_server_message(
+                                        "ERROR",
+                                        {
+                                            "code": "INVALID_CONNECT",
+                                            "message": "Player name is required.",
+                                        },
+                                    )
+
+                                    queue_message(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        error_message,
+                                    )
+
+                                    continue
+
+                                if client_socket in player_names:
+                                    continue
+
+                                player_names[client_socket] = player_name
+                                players.append(client_socket)
+
+                                print(f"Player joined: {player_name}")
+
+                                if len(players) == 1:
+                                    wait_message = make_server_message(
+                                        "LOBBY_WAIT",
+                                        {
+                                            "status": "WAITING_FOR_PLAYER_2"
+                                        },
+                                    )
+
+                                    queue_message(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        wait_message,
+                                    )
+
+                                elif len(players) == 2:
+                                    player_1 = player_names[players[0]]
+                                    player_2 = player_names[players[1]]
+
+                                    start_message = make_server_message(
+                                        "GAME_START",
+                                        {
+                                            "player_1": player_1,
+                                            "player_2": player_2,
+                                            "x_player": player_1,
+                                            "o_player": player_2,
+                                            "active_player": player_1,
+                                        },
+                                    )
+
+                                    for player_socket in players:
+                                        queue_message(
+                                            selector,
+                                            player_socket,
+                                            outgoing_buffers,
+                                            start_message,
+                                        )
+
+                    if mask & selectors.EVENT_WRITE:
+                        data = outgoing_buffers.get(client_socket, b"")
+
+                        if data:
+                            try:
+                                sent = client_socket.send(data)
+                                outgoing_buffers[client_socket] = data[sent:]
+                            except BlockingIOError:
+                                pass
+
+                        if not outgoing_buffers.get(client_socket):
+                            selector.modify(
+                                client_socket,
+                                selectors.EVENT_READ,
+                                data="client",
+                            )
 
     except KeyboardInterrupt:
         print("\nServer stopped.")
