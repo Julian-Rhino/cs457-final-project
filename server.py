@@ -71,6 +71,25 @@ def send_error(selector, client_socket, outgoing_buffers, code, text):
     )
 
 
+def check_winner(board, mark):
+    winning_lines = [
+        (0, 1, 2),
+        (3, 4, 5),
+        (6, 7, 8),
+        (0, 3, 6),
+        (1, 4, 7),
+        (2, 5, 8),
+        (0, 4, 8),
+        (2, 4, 6),
+    ]
+
+    for a, b, c in winning_lines:
+        if board[a] == mark and board[b] == mark and board[c] == mark:
+            return True
+
+    return False
+
+
 def valid_port(value):
     try:
         port = int(value)
@@ -117,6 +136,7 @@ def main():
     x_player = None
     o_player = None
     scores = {}
+    game_over = False
 
     server_socket = socket.socket(
         socket.AF_INET,
@@ -244,9 +264,11 @@ def main():
                                     player_1 = player_names[players[0]]
                                     player_2 = player_names[players[1]]
 
+                                    board = [""] * 9
                                     x_player = player_1
                                     o_player = player_2
                                     active_player = player_1
+                                    game_over = False
 
                                     scores[player_1] = 0
                                     scores[player_2] = 0
@@ -280,6 +302,16 @@ def main():
                                         outgoing_buffers,
                                         "GAME_NOT_READY",
                                         "The game has not started yet.",
+                                    )
+                                    continue
+
+                                if game_over:
+                                    send_error(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        "GAME_OVER",
+                                        "The game is already over.",
                                     )
                                     continue
 
@@ -330,9 +362,96 @@ def main():
                                     continue
 
                                 if player_name == x_player:
-                                    board[index] = "X"
+                                    mark = "X"
                                 else:
-                                    board[index] = "O"
+                                    mark = "O"
+
+                                board[index] = mark
+
+                                if check_winner(board, mark):
+                                    scores[player_name] += 1
+                                    game_over = True
+
+                                    state_message = make_server_message(
+                                        "STATE_UPDATE",
+                                        {
+                                            "board": board,
+                                            "active_player": player_name,
+                                            "scores": scores,
+                                        },
+                                    )
+
+                                    game_over_message = make_server_message(
+                                        "GAME_OVER",
+                                        {
+                                            "result": "WIN",
+                                            "winner": player_name,
+                                            "board": board,
+                                            "scores": scores,
+                                        },
+                                    )
+
+                                    for player_socket in players:
+                                        queue_message(
+                                            selector,
+                                            player_socket,
+                                            outgoing_buffers,
+                                            state_message,
+                                        )
+
+                                        queue_message(
+                                            selector,
+                                            player_socket,
+                                            outgoing_buffers,
+                                            game_over_message,
+                                        )
+
+                                    print(f"Winner: {player_name}")
+                                    print(f"Final board: {board}")
+
+                                    continue
+
+                                if "" not in board:
+                                    game_over = True
+
+                                    state_message = make_server_message(
+                                        "STATE_UPDATE",
+                                        {
+                                            "board": board,
+                                            "active_player": player_name,
+                                            "scores": scores,
+                                        },
+                                    )
+
+                                    game_over_message = make_server_message(
+                                        "GAME_OVER",
+                                        {
+                                            "result": "DRAW",
+                                            "winner": None,
+                                            "board": board,
+                                            "scores": scores,
+                                        },
+                                    )
+
+                                    for player_socket in players:
+                                        queue_message(
+                                            selector,
+                                            player_socket,
+                                            outgoing_buffers,
+                                            state_message,
+                                        )
+
+                                        queue_message(
+                                            selector,
+                                            player_socket,
+                                            outgoing_buffers,
+                                            game_over_message,
+                                        )
+
+                                    print("Game ended in a draw.")
+                                    print(f"Final board: {board}")
+
+                                    continue
 
                                 if active_player == x_player:
                                     active_player = o_player
