@@ -14,6 +14,7 @@ def encode_message(message):
 
 
 def decode_messages(buffer, data):
+    # Keep partial TCP data until a complete JSON line is available.
     buffer += data.decode("utf-8")
     messages = []
 
@@ -45,6 +46,7 @@ def make_server_message(msg_type, payload=None):
 
 
 def queue_message(selector, client_socket, outgoing_buffers, message):
+    # Store outgoing data until the socket is ready to send it.
     outgoing_buffers[client_socket] += encode_message(message)
 
     selector.modify(
@@ -72,6 +74,7 @@ def send_error(selector, client_socket, outgoing_buffers, code, text):
 
 
 def check_winner(board, mark):
+    # Check every possible winning row, column, and diagonal.
     winning_lines = [
         (0, 1, 2),
         (3, 4, 5),
@@ -161,6 +164,7 @@ def main():
 
     print(f"Server listening on 0.0.0.0:{args.port}")
 
+    # One selector loop handles the server socket and both players.
     try:
         while True:
             events = selector.select()
@@ -293,6 +297,7 @@ def main():
                                         )
 
                             elif msg_type == "MOVE":
+                                # Check the move before changing the board.
                                 player_name = player_names.get(client_socket)
 
                                 if len(players) < 2:

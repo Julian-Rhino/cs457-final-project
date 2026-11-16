@@ -60,6 +60,7 @@ def send_message(sock, msg_type, player_id, payload=None):
 
 
 def receive_message(sock, buffer):
+    # Keep reading until one complete JSON message has arrived.
     while "\n" not in buffer:
         data = sock.recv(1024)
 
@@ -79,6 +80,7 @@ def receive_message(sock, buffer):
 
 
 def display_board(board):
+    # Empty squares show their number so the player knows what to enter.
     cells = []
 
     for index, value in enumerate(board):
@@ -120,6 +122,7 @@ def get_move():
 def main():
     args = parse_arguments()
 
+    # Resolve the hostname before connecting to the server.
     try:
         server_ip = socket.gethostbyname(args.hostname)
     except socket.gaierror:
@@ -172,6 +175,7 @@ def main():
     my_mark = None
     game_finished = False
 
+    # Process messages from the server until the game finishes.
     try:
         while not game_finished:
             message, buffer = receive_message(
