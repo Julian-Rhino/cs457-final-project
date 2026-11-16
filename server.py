@@ -54,6 +54,23 @@ def queue_message(selector, client_socket, outgoing_buffers, message):
     )
 
 
+def send_error(selector, client_socket, outgoing_buffers, code, text):
+    message = make_server_message(
+        "ERROR",
+        {
+            "code": code,
+            "message": text,
+        },
+    )
+
+    queue_message(
+        selector,
+        client_socket,
+        outgoing_buffers,
+        message,
+    )
+
+
 def valid_port(value):
     try:
         port = int(value)
@@ -94,6 +111,12 @@ def main():
     outgoing_buffers = {}
     player_names = {}
     players = []
+
+    board = [""] * 9
+    active_player = None
+    x_player = None
+    o_player = None
+    scores = {}
 
     server_socket = socket.socket(
         socket.AF_INET,
@@ -179,25 +202,19 @@ def main():
                         for message in messages:
                             print(f"Received: {message}")
 
-                            if message.get("msg_type") == "CONNECT":
+                            msg_type = message.get("msg_type")
+
+                            if msg_type == "CONNECT":
                                 player_name = message.get("player_id")
 
                                 if not player_name:
-                                    error_message = make_server_message(
-                                        "ERROR",
-                                        {
-                                            "code": "INVALID_CONNECT",
-                                            "message": "Player name is required.",
-                                        },
-                                    )
-
-                                    queue_message(
+                                    send_error(
                                         selector,
                                         client_socket,
                                         outgoing_buffers,
-                                        error_message,
+                                        "INVALID_CONNECT",
+                                        "Player name is required.",
                                     )
-
                                     continue
 
                                 if client_socket in player_names:
@@ -227,14 +244,21 @@ def main():
                                     player_1 = player_names[players[0]]
                                     player_2 = player_names[players[1]]
 
+                                    x_player = player_1
+                                    o_player = player_2
+                                    active_player = player_1
+
+                                    scores[player_1] = 0
+                                    scores[player_2] = 0
+
                                     start_message = make_server_message(
                                         "GAME_START",
                                         {
                                             "player_1": player_1,
                                             "player_2": player_2,
-                                            "x_player": player_1,
-                                            "o_player": player_2,
-                                            "active_player": player_1,
+                                            "x_player": x_player,
+                                            "o_player": o_player,
+                                            "active_player": active_player,
                                         },
                                     )
 
@@ -245,6 +269,95 @@ def main():
                                             outgoing_buffers,
                                             start_message,
                                         )
+
+                            elif msg_type == "MOVE":
+                                player_name = player_names.get(client_socket)
+
+                                if len(players) < 2:
+                                    send_error(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        "GAME_NOT_READY",
+                                        "The game has not started yet.",
+                                    )
+                                    continue
+
+                                if player_name != active_player:
+                                    send_error(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        "OUT_OF_TURN",
+                                        "It is not your turn.",
+                                    )
+                                    continue
+
+                                payload = message.get("payload", {})
+                                row = payload.get("row")
+                                col = payload.get("col")
+
+                                if not isinstance(row, int) or not isinstance(col, int):
+                                    send_error(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        "INVALID_MOVE",
+                                        "Row and column must be numbers from 0 to 2.",
+                                    )
+                                    continue
+
+                                if row < 0 or row > 2 or col < 0 or col > 2:
+                                    send_error(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        "INVALID_MOVE",
+                                        "Row and column must be between 0 and 2.",
+                                    )
+                                    continue
+
+                                index = row * 3 + col
+
+                                if board[index] != "":
+                                    send_error(
+                                        selector,
+                                        client_socket,
+                                        outgoing_buffers,
+                                        "INVALID_MOVE",
+                                        "That square is already occupied.",
+                                    )
+                                    continue
+
+                                if player_name == x_player:
+                                    board[index] = "X"
+                                else:
+                                    board[index] = "O"
+
+                                if active_player == x_player:
+                                    active_player = o_player
+                                else:
+                                    active_player = x_player
+
+                                state_message = make_server_message(
+                                    "STATE_UPDATE",
+                                    {
+                                        "board": board,
+                                        "active_player": active_player,
+                                        "scores": scores,
+                                    },
+                                )
+
+                                for player_socket in players:
+                                    queue_message(
+                                        selector,
+                                        player_socket,
+                                        outgoing_buffers,
+                                        state_message,
+                                    )
+
+                                print(f"Board: {board}")
+                                print(f"Next turn: {active_player}")
 
                     if mask & selectors.EVENT_WRITE:
                         data = outgoing_buffers.get(client_socket, b"")
