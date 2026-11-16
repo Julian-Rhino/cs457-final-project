@@ -1,10 +1,33 @@
 import argparse
+import json
 import selectors
 import socket
 
 
 HOST = "0.0.0.0"
 MAX_CLIENTS = 2
+
+
+def encode_message(message):
+    return (json.dumps(message) + "\n").encode("utf-8")
+
+
+def decode_messages(buffer, data):
+    buffer += data.decode("utf-8")
+    messages = []
+
+    while "\n" in buffer:
+        line, buffer = buffer.split("\n", 1)
+
+        if not line.strip():
+            continue
+
+        try:
+            messages.append(json.loads(line))
+        except json.JSONDecodeError:
+            print("Received invalid JSON message")
+
+    return messages, buffer
 
 
 def valid_port(value):
@@ -25,6 +48,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Tic-Tac-Toe game server"
     )
+
     parser.add_argument(
         "-p",
         "--port",
@@ -32,6 +56,7 @@ def parse_arguments():
         required=True,
         help="Port number to listen on (1024-65535)",
     )
+
     return parser.parse_args()
 
 
@@ -40,14 +65,28 @@ def main():
 
     selector = selectors.DefaultSelector()
     clients = set()
+    buffers = {}
 
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket = socket.socket(
+        socket.AF_INET,
+        socket.SOCK_STREAM,
+    )
+
+    server_socket.setsockopt(
+        socket.SOL_SOCKET,
+        socket.SO_REUSEADDR,
+        1,
+    )
+
     server_socket.bind((HOST, args.port))
     server_socket.listen()
     server_socket.setblocking(False)
 
-    selector.register(server_socket, selectors.EVENT_READ, data="server")
+    selector.register(
+        server_socket,
+        selectors.EVENT_READ,
+        data="server",
+    )
 
     print(f"Server listening on 0.0.0.0:{args.port}")
 
@@ -65,7 +104,10 @@ def main():
                         continue
 
                     client_socket.setblocking(False)
+
                     clients.add(client_socket)
+                    buffers[client_socket] = ""
+
                     selector.register(
                         client_socket,
                         selectors.EVENT_READ,
@@ -84,9 +126,21 @@ def main():
 
                     if not data:
                         print("Client disconnected")
+
                         selector.unregister(client_socket)
                         clients.remove(client_socket)
+                        buffers.pop(client_socket, None)
                         client_socket.close()
+
+                        continue
+
+                    messages, buffers[client_socket] = decode_messages(
+                        buffers[client_socket],
+                        data,
+                    )
+
+                    for message in messages:
+                        print(f"Received: {message}")
 
     except KeyboardInterrupt:
         print("\nServer stopped.")
